@@ -1,0 +1,13 @@
+sharepoint_media.settings:
+  title: 'SharePoint Media'
+  route_name: sharepoint_media.settings
+  description: 'Configure SharePoint Media integration settings.'
+  parent: system.admin_config_media
+  weight: 10
+
+sharepoint_media.admin:
+  title: 'SharePoint Media'
+  route_name: sharepoint_media.search
+  description: 'Manage and search SharePoint media files.'
+  parent: system.admin_content
+  weight: 5

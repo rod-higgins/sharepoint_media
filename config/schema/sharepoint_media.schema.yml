@@ -1,0 +1,192 @@
+sharepoint_media.settings:
+  type: config_object
+  label: 'SharePoint Media settings'
+  mapping:
+    # Connection settings
+    tenant_id:
+      type: string
+      label: 'Microsoft 365 Tenant ID'
+    client_id:
+      type: string
+      label: 'Azure AD Application Client ID'
+    client_secret:
+      type: string
+      label: 'Azure AD Application Client Secret'
+    
+    # Sync settings
+    auto_sync_enabled:
+      type: boolean
+      label: 'Enable automatic sync'
+    auto_sync_interval:
+      type: integer
+      label: 'Auto sync interval in seconds'
+    auto_refresh_urls:
+      type: boolean
+      label: 'Auto-refresh download URLs'
+    batch_size:
+      type: integer
+      label: 'Sync batch size'
+    
+    # Drive configuration
+    sync_drives:
+      type: sequence
+      label: 'Drives to sync'
+      sequence:
+        type: mapping
+        mapping:
+          drive_id:
+            type: string
+            label: 'Drive ID'
+          enabled:
+            type: boolean
+            label: 'Enable sync for this drive'
+          folder_path:
+            type: string
+            label: 'Folder path to sync'
+          options:
+            type: mapping
+            label: 'Sync options'
+            mapping:
+              recursive:
+                type: boolean
+                label: 'Recursive sync'
+              update_existing:
+                type: boolean
+                label: 'Update existing media'
+              file_types:
+                type: sequence
+                label: 'Allowed file types'
+                sequence:
+                  type: string
+              max_file_size:
+                type: integer
+                label: 'Maximum file size'
+    
+    # Filter settings
+    allowed_file_types:
+      type: sequence
+      label: 'Allowed file types for sync'
+      sequence:
+        type: string
+    max_file_size:
+      type: integer
+      label: 'Maximum file size in bytes'
+    exclude_paths:
+      type: text
+      label: 'Path patterns to exclude from sync'
+    
+    # Advanced settings
+    debug_mode:
+      type: boolean
+      label: 'Enable debug mode'
+    thumbnail_cache_duration:
+      type: integer
+      label: 'Thumbnail cache duration in hours'
+    url_cache_duration:
+      type: integer
+      label: 'Download URL cache duration in minutes'
+    concurrent_requests:
+      type: integer
+      label: 'Maximum concurrent requests to Graph API'
+    
+    # Performance settings
+    enable_search_preprocessing:
+      type: boolean
+      label: 'Enable search preprocessing'
+    cache_metadata:
+      type: boolean
+      label: 'Cache metadata'
+    lazy_load_thumbnails:
+      type: boolean
+      label: 'Lazy load thumbnails'
+
+# Search API index configuration
+search_api.index.sharepoint_media:
+  type: config_entity
+  label: 'SharePoint Media search index'
+  mapping:
+    id:
+      type: string
+      label: 'Index ID'
+    name:
+      type: label
+      label: 'Index name'
+    description:
+      type: text
+      label: 'Index description'
+    read_only:
+      type: boolean
+      label: 'Read only'
+    field_settings:
+      type: mapping
+      label: 'Field settings'
+      mapping:
+        name:
+          type: search_api.field
+        field_sharepoint_drive_item_id:
+          type: search_api.field
+        field_mime_type:
+          type: search_api.field
+        field_file_size:
+          type: search_api.field
+        field_sharepoint_path:
+          type: search_api.field
+        field_created_by:
+          type: search_api.field
+        field_tags:
+          type: search_api.field
+        sharepoint_file_type:
+          type: search_api.field
+        sharepoint_extension:
+          type: search_api.field
+        sharepoint_size_category:
+          type: search_api.field
+        sharepoint_resolution:
+          type: search_api.field
+        sharepoint_creation_year:
+          type: search_api.field
+        sharepoint_keywords:
+          type: search_api.field
+        sharepoint_technical_specs:
+          type: search_api.field
+        sharepoint_path_components:
+          type: search_api.field
+        sharepoint_quality_score:
+          type: search_api.field
+    datasource_settings:
+      type: mapping
+      label: 'Datasource settings'
+      mapping:
+        'entity:media':
+          type: mapping
+          mapping:
+            bundles:
+              type: mapping
+              mapping:
+                default:
+                  type: boolean
+                selected:
+                  type: sequence
+                  sequence:
+                    type: string
+    server:
+      type: string
+      label: 'Search server'
+
+# Search API field type
+search_api.field:
+  type: mapping
+  label: 'Search API field'
+  mapping:
+    label:
+      type: label
+    datasource_id:
+      type: string
+    property_path:
+      type: string
+    type:
+      type: string
+    boost:
+      type: float
+    configuration:
+      type: mapping

@@ -1,0 +1,50 @@
+sharepoint_media.search:
+  path: '/admin/content/sharepoint-media/search'
+  defaults:
+    _form: '\Drupal\sharepoint_media\Form\SharePointMediaSearchForm'
+    _title: 'Search SharePoint Media'
+  requirements:
+    _permission: 'administer sharepoint media'
+
+sharepoint_media.search_results:
+  path: '/admin/content/sharepoint-media/results'
+  defaults:
+    _controller: '\Drupal\sharepoint_media\Controller\SearchResultsController::results'
+    _title: 'SharePoint Media Search Results'
+  requirements:
+    _permission: 'administer sharepoint media'
+
+sharepoint_media.settings:
+  path: '/admin/config/media/sharepoint-media'
+  defaults:
+    _form: '\Drupal\sharepoint_media\Form\SharePointMediaSettingsForm'
+    _title: 'SharePoint Media Settings'
+  requirements:
+    _permission: 'administer sharepoint media'
+
+sharepoint_media.sync:
+  path: '/admin/content/sharepoint-media/sync'
+  defaults:
+    _controller: '\Drupal\sharepoint_media\Controller\SyncController::sync'
+    _title: 'Sync SharePoint Media'
+  requirements:
+    _permission: 'administer sharepoint media'
+  methods: [POST]
+
+sharepoint_media.stream:
+  path: '/sharepoint-media/{media_id}/stream'
+  defaults:
+    _controller: '\Drupal\sharepoint_media\Controller\StreamController::stream'
+  requirements:
+    _permission: 'access sharepoint media'
+    media_id: '\d+'
+  methods: [GET]
+
+sharepoint_media.download:
+  path: '/sharepoint-media/{media_id}/download'
+  defaults:
+    _controller: '\Drupal\sharepoint_media\Controller\StreamController::download'
+  requirements:
+    _permission: 'access sharepoint media'
+    media_id: '\d+'
+  methods: [GET]

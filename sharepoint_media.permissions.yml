@@ -1,0 +1,34 @@
+administer sharepoint media:
+  title: 'Administer SharePoint Media'
+  description: 'Configure SharePoint Media settings and perform sync operations'
+  restrict access: true
+
+access sharepoint media:
+  title: 'Access SharePoint Media'
+  description: 'View and download SharePoint media files'
+
+search sharepoint media:
+  title: 'Search SharePoint Media'
+  description: 'Use SharePoint media search functionality'
+
+sync sharepoint media:
+  title: 'Sync SharePoint Media'
+  description: 'Manually trigger SharePoint media synchronization'
+  restrict access: true
+
+manage sharepoint media urls:
+  title: 'Manage SharePoint Media URLs'
+  description: 'Refresh and manage SharePoint download URLs'
+  restrict access: true
+
+view sharepoint media metadata:
+  title: 'View SharePoint Media Metadata'
+  description: 'View detailed metadata for SharePoint media files'
+
+stream sharepoint media:
+  title: 'Stream SharePoint Media'
+  description: 'Stream audio and video files from SharePoint'
+
+download sharepoint media:
+  title: 'Download SharePoint Media'
+  description: 'Download files from SharePoint through the proxy'

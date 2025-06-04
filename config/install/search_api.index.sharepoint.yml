@@ -1,0 +1,278 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - sharepoint_media
+    - search_api
+    - media
+  config:
+    - search_api.server.postgresql_server
+id: sharepoint_media
+name: 'SharePoint Media Index'
+description: 'Search index for SharePoint media entities with enhanced metadata.'
+read_only: false
+field_settings:
+  name:
+    label: 'Media Name'
+    datasource_id: 'entity:media'
+    property_path: name
+    type: text
+    boost: 3.0
+    dependencies:
+      module:
+        - media
+  field_sharepoint_drive_item_id:
+    label: 'Drive Item ID'
+    datasource_id: 'entity:media'
+    property_path: 'field_sharepoint_drive_item_id'
+    type: string
+    dependencies:
+      module:
+        - sharepoint_media
+  field_mime_type:
+    label: 'MIME Type'
+    datasource_id: 'entity:media'
+    property_path: 'field_mime_type'
+    type: string
+    dependencies:
+      module:
+        - sharepoint_media
+  field_file_size:
+    label: 'File Size'
+    datasource_id: 'entity:media'
+    property_path: 'field_file_size'
+    type: integer
+    dependencies:
+      module:
+        - sharepoint_media
+  field_sharepoint_path:
+    label: 'SharePoint Path'
+    datasource_id: 'entity:media'
+    property_path: 'field_sharepoint_path'
+    type: text
+    boost: 2.0
+    dependencies:
+      module:
+        - sharepoint_media
+  field_created_by:
+    label: 'Created By'
+    datasource_id: 'entity:media'
+    property_path: 'field_created_by'
+    type: text
+    boost: 1.5
+    dependencies:
+      module:
+        - sharepoint_media
+  field_created_date:
+    label: 'Created Date'
+    datasource_id: 'entity:media'
+    property_path: 'field_created_date'
+    type: date
+    dependencies:
+      module:
+        - sharepoint_media
+  field_modified_date:
+    label: 'Modified Date'
+    datasource_id: 'entity:media'
+    property_path: 'field_modified_date'
+    type: date
+    dependencies:
+      module:
+        - sharepoint_media
+  field_auto_tags:
+    label: 'Auto Tags'
+    datasource_id: 'entity:media'
+    property_path: 'field_auto_tags'
+    type: text
+    boost: 2.5
+    dependencies:
+      module:
+        - sharepoint_media
+  field_tags:
+    label: 'Manual Tags'
+    datasource_id: 'entity:media'
+    property_path: 'field_tags:entity:name'
+    type: text
+    boost: 3.0
+    dependencies:
+      module:
+        - sharepoint_media
+        - taxonomy
+  # Image specific fields
+  field_image_width:
+    label: 'Image Width'
+    datasource_id: 'entity:media'
+    property_path: 'field_image_width'
+    type: integer
+    dependencies:
+      module:
+        - sharepoint_media
+  field_image_height:
+    label: 'Image Height'
+    datasource_id: 'entity:media'
+    property_path: 'field_image_height'
+    type: integer
+    dependencies:
+      module:
+        - sharepoint_media
+  field_camera_make:
+    label: 'Camera Make'
+    datasource_id: 'entity:media'
+    property_path: 'field_camera_make'
+    type: text
+    dependencies:
+      module:
+        - sharepoint_media
+  field_camera_model:
+    label: 'Camera Model'
+    datasource_id: 'entity:media'
+    property_path: 'field_camera_model'
+    type: text
+    dependencies:
+      module:
+        - sharepoint_media
+  # Video/Audio fields
+  field_duration:
+    label: 'Duration'
+    datasource_id: 'entity:media'
+    property_path: 'field_duration'
+    type: integer
+    dependencies:
+      module:
+        - sharepoint_media
+  field_artist:
+    label: 'Artist'
+    datasource_id: 'entity:media'
+    property_path: 'field_artist'
+    type: text
+    boost: 2.0
+    dependencies:
+      module:
+        - sharepoint_media
+  field_album:
+    label: 'Album'
+    datasource_id: 'entity:media'
+    property_path: 'field_album'
+    type: text
+    boost: 1.5
+    dependencies:
+      module:
+        - sharepoint_media
+  field_genre:
+    label: 'Genre'
+    datasource_id: 'entity:media'
+    property_path: 'field_genre'
+    type: text
+    dependencies:
+      module:
+        - sharepoint_media
+  # Processed fields from SharePointMetadataProcessor
+  sharepoint_file_type:
+    label: 'File Type Category'
+    property_path: 'sharepoint_file_type'
+    type: string
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_extension:
+    label: 'File Extension'
+    property_path: 'sharepoint_extension'
+    type: string
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_size_category:
+    label: 'Size Category'
+    property_path: 'sharepoint_size_category'
+    type: string
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_resolution:
+    label: 'Resolution Category'
+    property_path: 'sharepoint_resolution'
+    type: string
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_duration_category:
+    label: 'Duration Category'
+    property_path: 'sharepoint_duration_category'
+    type: string
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_creation_year:
+    label: 'Creation Year'
+    property_path: 'sharepoint_creation_year'
+    type: integer
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_keywords:
+    label: 'Generated Keywords'
+    property_path: 'sharepoint_keywords'
+    type: text
+    boost: 2.0
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_technical_specs:
+    label: 'Technical Specifications'
+    property_path: 'sharepoint_technical_specs'
+    type: text
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_path_components:
+    label: 'Path Components'
+    property_path: 'sharepoint_path_components'
+    type: text
+    boost: 1.5
+    dependencies:
+      module:
+        - sharepoint_media
+  sharepoint_quality_score:
+    label: 'Quality Score'
+    property_path: 'sharepoint_quality_score'
+    type: decimal
+    dependencies:
+      module:
+        - sharepoint_media
+datasource_settings:
+  'entity:media':
+    bundles:
+      default: false
+      selected:
+        - sharepoint_file
+    languages:
+      default: true
+      selected: {  }
+processor_settings:
+  add_url:
+    weights:
+      preprocess_index: -30
+  aggregated_field:
+    weights:
+      add_properties: 20
+  content_access:
+    weights:
+      preprocess_index: -6
+      preprocess_query: -4
+  entity_status:
+    weights:
+      preprocess_index: -10
+  rendered_item:
+    weights:
+      add_properties: 0
+      pre_index_save: -10
+  sharepoint_metadata:
+    weights:
+      add_properties: 0
+tracker_settings:
+  default:
+    indexing_order: lifo
+options:
+  index_directly: true
+  cron_limit: 50
+server: postgresql_server

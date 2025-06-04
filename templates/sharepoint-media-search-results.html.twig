@@ -1,0 +1,437 @@
+{#
+/**
+ * @file
+ * Template for SharePoint media search results.
+ *
+ * Available variables:
+ * - results: Array of search results
+ * - facets: Array of search facets
+ * - total: Total number of results
+ * - keywords: Search keywords
+ * - current_page: Current page number
+ * - items_per_page: Items per page
+ * - filters: Current active filters
+ */
+#}
+
+<div class="sharepoint-media-search-results">
+  
+  {# Search summary #}
+  <div class="search-summary">
+    <div class="search-info">
+      {% if total > 0 %}
+        <h2 class="results-count">
+          {{ 'Found @total results'|t({'@total': total|number_format}) }}
+          {% if keywords %}
+            {{ 'for "@keywords"'|t({'@keywords': keywords}) }}
+          {% endif %}
+        </h2>
+        {% if total > items_per_page %}
+          <p class="page-info">
+            {{ 'Showing @from - @to of @total'|t({
+              '@from': (current_page * items_per_page) + 1,
+              '@to': min((current_page + 1) * items_per_page, total),
+              '@total': total|number_format
+            }) }}
+          </p>
+        {% endif %}
+      {% else %}
+        <h2 class="no-results-title">{{ 'No results found'|t }}</h2>
+        {% if keywords %}
+          <p class="no-results-message">
+            {{ 'No media files found matching "@keywords". Try different keywords or remove some filters.'|t({'@keywords': keywords}) }}
+          </p>
+        {% else %}
+          <p class="no-results-message">
+            {{ 'No media files found. Try adjusting your filters.'|t }}
+          </p>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    {# Quick actions #}
+    {% if total > 0 %}
+      <div class="search-actions">
+        <div class="sort-options">
+          <label for="sort-select">{{ 'Sort by'|t }}:</label>
+          <select id="sort-select" onchange="updateSort(this.value)">
+            <option value="relevance">{{ 'Relevance'|t }}</option>
+            <option value="name_asc">{{ 'Name (A-Z)'|t }}</option>
+            <option value="name_desc">{{ 'Name (Z-A)'|t }}</option>
+            <option value="date_desc">{{ 'Newest First'|t }}</option>
+            <option value="date_asc">{{ 'Oldest First'|t }}</option>
+            <option value="size_desc">{{ 'Largest First'|t }}</option>
+            <option value="size_asc">{{ 'Smallest First'|t }}</option>
+            <option value="quality_desc">{{ 'Highest Quality'|t }}</option>
+          </select>
+        </div>
+
+        <div class="view-options">
+          <button type="button" class="view-toggle active" data-view="grid" title="{{ 'Grid view'|t }}">
+            <i class="icon-grid"></i>
+          </button>
+          <button type="button" class="view-toggle" data-view="list" title="{{ 'List view'|t }}">
+            <i class="icon-list"></i>
+          </button>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="search-layout">
+    
+    {# Facets sidebar #}
+    {% if facets %}
+      <aside class="search-facets">
+        <div class="facets-header">
+          <h3>{{ 'Filter Results'|t }}</h3>
+          {% if filters %}
+            <button type="button" class="clear-filters-btn" onclick="clearAllFilters()">
+              {{ 'Clear All'|t }}
+            </button>
+          {% endif %}
+        </div>
+
+        {% for facet in facets %}
+          {% if facet.values %}
+            <div class="facet-group" data-facet="{{ facet.id }}">
+              <h4 class="facet-title">{{ facet.label }}</h4>
+              <div class="facet-values">
+                {% for value in facet.values|slice(0, 10) %}
+                  <div class="facet-value{% if value.active %} active{% endif %}">
+                    <a href="{{ value.url }}" class="facet-link">
+                      <span class="facet-label">{{ value.label }}</span>
+                      <span class="facet-count">({{ value.count }})</span>
+                    </a>
+                  </div>
+                {% endfor %}
+                
+                {% if facet.values|length > 10 %}
+                  <button type="button" class="show-more-facets" data-facet="{{ facet.id }}">
+                    {{ 'Show more'|t }}
+                  </button>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </aside>
+    {% endif %}
+
+    {# Results content #}
+    <main class="search-results">
+      {% if results %}
+        <div class="media-grid" data-view="grid">
+          {% for result in results %}
+            <article class="media-item" data-media-id="{{ result.media_id }}" data-file-type="{{ result.file_type }}">
+              
+              {# Thumbnail #}
+              <div class="media-thumbnail">
+                {% if result.thumbnail_url %}
+                  <img src="{{ result.thumbnail_url }}" 
+                       alt="{{ result.title }}" 
+                       class="thumbnail-image"
+                       loading="lazy" />
+                {% else %}
+                  <div class="placeholder-thumbnail" data-file-type="{{ result.file_type }}">
+                    <i class="file-icon icon-{{ result.file_type_icon }}"></i>
+                    <span class="file-extension">{{ result.title|split('.')|last|upper }}</span>
+                  </div>
+                {% endif %}
+                
+                {# File type badge #}
+                <span class="file-type-badge badge-{{ result.file_type }}">
+                  {{ result.file_type|title }}
+                </span>
+
+                {# Relevance score (for debugging) #}
+                {% if result.score and user.hasPermission('administer sharepoint media') %}
+                  <span class="relevance-score" title="Relevance: {{ result.relevance }}">
+                    {{ result.relevance }}
+                  </span>
+                {% endif %}
+              </div>
+
+              {# Media details #}
+              <div class="media-details">
+                <h3 class="media-title" title="{{ result.title }}">
+                  {{ result.title }}
+                </h3>
+
+                {# Metadata #}
+                <div class="media-metadata">
+                  <div class="meta-row">
+                    <span class="file-size">{{ result.formatted_file_size }}</span>
+                    {% if result.created_date_formatted %}
+                      <span class="created-date">{{ result.created_date_formatted }}</span>
+                    {% endif %}
+                  </div>
+
+                  {% if result.metadata %}
+                    <div class="meta-row">
+                      {% if result.metadata.resolution %}
+                        <span class="resolution">{{ result.metadata.resolution }}</span>
+                      {% endif %}
+                      {% if result.metadata.duration %}
+                        <span class="duration">{{ result.metadata.duration }}</span>
+                      {% endif %}
+                      {% if result.metadata.camera %}
+                        <span class="camera">{{ result.metadata.camera }}</span>
+                      {% endif %}
+                    </div>
+
+                    {% if result.metadata.artist or result.metadata.album %}
+                      <div class="meta-row">
+                        {% if result.metadata.artist %}
+                          <span class="artist">{{ result.metadata.artist }}</span>
+                        {% endif %}
+                        {% if result.metadata.album %}
+                          <span class="album">{{ result.metadata.album }}</span>
+                        {% endif %}
+                      </div>
+                    {% endif %}
+                  {% endif %}
+
+                  {% if result.created_by %}
+                    <div class="meta-row">
+                      <span class="created-by">
+                        <i class="icon-user"></i>
+                        {{ result.created_by }}
+                      </span>
+                    </div>
+                  {% endif %}
+                </div>
+
+                {# Action buttons #}
+                <div class="media-actions">
+                  {% if result.file_type in ['image', 'video', 'audio'] %}
+                    <a href="{{ result.stream_url }}" 
+                       class="btn btn-primary action-view" 
+                       target="_blank"
+                       title="{{ 'View/Play'|t }}">
+                      <i class="icon-play"></i>
+                      {% if result.file_type == 'image' %}
+                        {{ 'View'|t }}
+                      {% else %}
+                        {{ 'Play'|t }}
+                      {% endif %}
+                    </a>
+                  {% endif %}
+
+                  <a href="{{ result.download_proxy_url }}" 
+                     class="btn btn-secondary action-download" 
+                     download
+                     title="{{ 'Download'|t }}">
+                    <i class="icon-download"></i>
+                    {{ 'Download'|t }}
+                  </a>
+
+                  {% if result.sharepoint_url %}
+                    <a href="{{ result.sharepoint_url }}" 
+                       class="btn btn-outline action-sharepoint" 
+                       target="_blank"
+                       title="{{ 'Open in SharePoint'|t }}">
+                      <i class="icon-external-link"></i>
+                      {{ 'SharePoint'|t }}
+                    </a>
+                  {% endif %}
+
+                  <button type="button" 
+                          class="btn btn-outline action-info" 
+                          onclick="showMediaInfo({{ result.media_id }})"
+                          title="{{ 'Show details'|t }}">
+                    <i class="icon-info"></i>
+                    {{ 'Info'|t }}
+                  </button>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+
+        {# Pagination #}
+        {% if total > items_per_page %}
+          <div class="search-pagination">
+            {{ pager }}
+          </div>
+        {% endif %}
+
+      {% else %}
+        <div class="no-results">
+          <div class="no-results-icon">
+            <i class="icon-search"></i>
+          </div>
+          <h3>{{ 'No media files found'|t }}</h3>
+          <p>{{ 'Try adjusting your search terms or filters.'|t }}</p>
+          
+          <div class="no-results-suggestions">
+            <h4>{{ 'Suggestions'|t }}:</h4>
+            <ul>
+              <li>{{ 'Check your spelling'|t }}</li>
+              <li>{{ 'Try different or more general keywords'|t }}</li>
+              <li>{{ 'Remove some filters'|t }}</li>
+              <li>{{ 'Try searching for file types (jpg, mp4, pdf, etc.)'|t }}</li>
+            </ul>
+          </div>
+        </div>
+      {% endif %}
+    </main>
+  </div>
+</div>
+
+{# Media info modal #}
+<div id="media-info-modal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modal-title">{{ 'Media Information'|t }}</h3>
+      <button type="button" class="modal-close" onclick="closeMediaInfo()">
+        <i class="icon-x"></i>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      {# Content loaded via AJAX #}
+    </div>
+  </div>
+</div>
+
+<script>
+// Search functionality
+function updateSort(sortValue) {
+  const url = new URL(window.location);
+  if (sortValue === 'relevance') {
+    url.searchParams.delete('sort');
+  } else {
+    url.searchParams.set('sort', sortValue);
+  }
+  window.location.href = url.toString();
+}
+
+function clearAllFilters() {
+  const url = new URL(window.location);
+  // Keep only keywords parameter
+  const keywords = url.searchParams.get('keywords');
+  url.search = '';
+  if (keywords) {
+    url.searchParams.set('keywords', keywords);
+  }
+  window.location.href = url.toString();
+}
+
+// View toggle
+document.querySelectorAll('.view-toggle').forEach(button => {
+  button.addEventListener('click', function() {
+    const view = this.dataset.view;
+    const grid = document.querySelector('.media-grid');
+    
+    // Update active button
+    document.querySelectorAll('.view-toggle').forEach(btn => btn.classList.remove('active'));
+    this.classList.add('active');
+    
+    // Update grid view
+    grid.dataset.view = view;
+  });
+});
+
+// Media info modal
+function showMediaInfo(mediaId) {
+  const modal = document.getElementById('media-info-modal');
+  const modalBody = document.getElementById('modal-body');
+  
+  modalBody.innerHTML = '<div class="loading">Loading...</div>';
+  modal.style.display = 'block';
+  
+  fetch(`/sharepoint-media/${mediaId}/info`)
+    .then(response => response.json())
+    .then(data => {
+      modalBody.innerHTML = formatMediaInfo(data);
+    })
+    .catch(error => {
+      modalBody.innerHTML = '<div class="error">Failed to load media information.</div>';
+    });
+}
+
+function closeMediaInfo() {
+  document.getElementById('media-info-modal').style.display = 'none';
+}
+
+function formatMediaInfo(data) {
+  let html = `
+    <div class="media-info">
+      <h4>${data.name}</h4>
+      <dl class="info-list">
+        <dt>File Size:</dt>
+        <dd>${data.formatted_size}</dd>
+        <dt>MIME Type:</dt>
+        <dd>${data.mime_type}</dd>
+  `;
+  
+  if (data.width && data.height) {
+    html += `
+        <dt>Dimensions:</dt>
+        <dd>${data.width} × ${data.height}</dd>
+    `;
+  }
+  
+  if (data.formatted_duration) {
+    html += `
+        <dt>Duration:</dt>
+        <dd>${data.formatted_duration}</dd>
+    `;
+  }
+  
+  if (data.created_by) {
+    html += `
+        <dt>Created By:</dt>
+        <dd>${data.created_by}</dd>
+    `;
+  }
+  
+  if (data.created_date) {
+    html += `
+        <dt>Created Date:</dt>
+        <dd>${data.created_date}</dd>
+    `;
+  }
+  
+  if (data.sharepoint_url) {
+    html += `
+        <dt>SharePoint URL:</dt>
+        <dd><a href="${data.sharepoint_url}" target="_blank">Open in SharePoint</a></dd>
+    `;
+  }
+  
+  html += `
+      </dl>
+    </div>
+  `;
+  
+  return html;
+}
+
+// Facet show more
+document.querySelectorAll('.show-more-facets').forEach(button => {
+  button.addEventListener('click', function() {
+    const facetId = this.dataset.facet;
+    const facetGroup = document.querySelector(`[data-facet="${facetId}"]`);
+    const hiddenValues = facetGroup.querySelectorAll('.facet-value:nth-child(n+11)');
+    
+    hiddenValues.forEach(value => value.style.display = 'block');
+    this.style.display = 'none';
+  });
+});
+
+// Close modal when clicking outside
+window.addEventListener('click', function(event) {
+  const modal = document.getElementById('media-info-modal');
+  if (event.target === modal) {
+    closeMediaInfo();
+  }
+});
+
+// Keyboard navigation
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') {
+    closeMediaInfo();
+  }
+});
+</script>

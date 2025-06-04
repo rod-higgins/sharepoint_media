@@ -1,0 +1,69 @@
+base:
+  version: 1.x
+  css:
+    theme:
+      css/sharepoint-media.css: {}
+  js:
+    js/sharepoint-media.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+    - core/drupalSettings
+    - core/jquery.once
+
+search_results:
+  version: 1.x
+  css:
+    theme:
+      css/sharepoint-media.css: {}
+  js:
+    js/sharepoint-media.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+    - core/drupalSettings
+    - core/jquery.once
+    - sharepoint_media/base
+
+admin:
+  version: 1.x
+  css:
+    theme:
+      css/sharepoint-media-admin.css: {}
+  js:
+    js/sharepoint-media-admin.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+    - core/ajax
+    - core/drupalSettings
+    - core/jquery.once
+
+modal:
+  version: 1.x
+  css:
+    component:
+      css/sharepoint-media-modal.css: {}
+  js:
+    js/sharepoint-media-modal.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+    - core/jquery.once
+
+icons:
+  version: 1.x
+  css:
+    theme:
+      css/sharepoint-media-icons.css: {}
+
+sync:
+  version: 1.x
+  js:
+    js/sharepoint-media-sync.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+    - core/ajax
+    - core/drupalSettings
+    - core/jquery.once

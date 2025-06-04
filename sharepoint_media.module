@@ -1,0 +1,238 @@
+<?php
+
+/**
+ * @file
+ * Contains sharepoint_media.module.
+ */
+
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\media\MediaInterface;
+
+/**
+ * Implements hook_help().
+ */
+function sharepoint_media_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    case 'help.page.sharepoint_media':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('The SharePoint Media module allows you to integrate SharePoint drives as media sources in Drupal, providing searchable media entities without storing files locally.') . '</p>';
+      $output .= '<h3>' . t('Configuration') . '</h3>';
+      $output .= '<p>' . t('Configure your SharePoint integration at <a href=":url">SharePoint Media Settings</a>.', [':url' => '/admin/config/media/sharepoint-media']) . '</p>';
+      $output .= '<h3>' . t('Usage') . '</h3>';
+      $output .= '<p>' . t('Use the sync functionality to import SharePoint drive items as media entities. Search and manage your media at <a href=":url">SharePoint Media Search</a>.', [':url' => '/admin/content/sharepoint-media/search']) . '</p>';
+      return $output;
+
+    default:
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function sharepoint_media_theme() {
+  return [
+    'sharepoint_media_search_results' => [
+      'variables' => [
+        'results' => [],
+        'facets' => [],
+        'total' => 0,
+        'keywords' => '',
+        'current_page' => 0,
+        'items_per_page' => 20,
+      ],
+      'template' => 'sharepoint-media-search-results',
+    ],
+    'sharepoint_media_item' => [
+      'variables' => [
+        'media' => NULL,
+        'view_mode' => 'default',
+        'thumbnail_url' => '',
+        'download_url' => '',
+        'metadata' => [],
+      ],
+      'template' => 'sharepoint-media-item',
+    ],
+    'sharepoint_media_thumbnail' => [
+      'variables' => [
+        'thumbnail_url' => '',
+        'title' => '',
+        'mime_type' => '',
+        'file_size' => 0,
+      ],
+      'template' => 'sharepoint-media-thumbnail',
+    ],
+  ];
+}
+
+/**
+ * Implements hook_media_source_info_alter().
+ */
+function sharepoint_media_media_source_info_alter(array &$sources) {
+  // Additional media source alterations if needed.
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function sharepoint_media_entity_presave(EntityInterface $entity) {
+  if ($entity instanceof MediaInterface && $entity->bundle() === 'sharepoint_file') {
+    // Ensure download URLs are fresh before saving.
+    $url_manager = \Drupal::service('sharepoint_media.url_manager');
+    $drive_item_id = $entity->get('field_sharepoint_drive_item_id')->value;
+    
+    if ($drive_item_id) {
+      try {
+        $fresh_url = $url_manager->getFreshDownloadUrl($drive_item_id);
+        $entity->set('field_download_url', $fresh_url);
+      }
+      catch (\Exception $e) {
+        \Drupal::logger('sharepoint_media')->error('Failed to refresh download URL for media @id: @message', [
+          '@id' => $entity->id(),
+          '@message' => $e->getMessage(),
+        ]);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_cron().
+ */
+function sharepoint_media_cron() {
+  // Refresh expired download URLs during cron runs.
+  $config = \Drupal::config('sharepoint_media.settings');
+  
+  if ($config->get('auto_refresh_urls')) {
+    $sync_service = \Drupal::service('sharepoint_media.sync_service');
+    $sync_service->refreshExpiredUrls();
+  }
+  
+  // Auto-sync if enabled.
+  if ($config->get('auto_sync_enabled')) {
+    $last_sync = \Drupal::state()->get('sharepoint_media.last_auto_sync', 0);
+    $sync_interval = $config->get('auto_sync_interval') ?: 3600; // Default 1 hour
+    
+    if (time() - $last_sync > $sync_interval) {
+      $sync_service->syncConfiguredDrives();
+      \Drupal::state()->set('sharepoint_media.last_auto_sync', time());
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function sharepoint_media_form_media_sharepoint_file_add_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  // Hide the source field as it will be populated automatically.
+  if (isset($form['field_sharepoint_drive_item_id'])) {
+    $form['field_sharepoint_drive_item_id']['#access'] = FALSE;
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function sharepoint_media_form_media_sharepoint_file_edit_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  // Make source field read-only in edit form.
+  if (isset($form['field_sharepoint_drive_item_id'])) {
+    $form['field_sharepoint_drive_item_id']['#disabled'] = TRUE;
+    $form['field_sharepoint_drive_item_id']['#description'] = t('This field cannot be modified after creation.');
+  }
+}
+
+/**
+ * Implements hook_preprocess_HOOK().
+ */
+function sharepoint_media_preprocess_media(&$variables) {
+  $media = $variables['media'];
+  
+  if ($media->bundle() === 'sharepoint_file') {
+    // Add SharePoint-specific variables.
+    $variables['sharepoint_web_url'] = $media->get('field_web_url')->value;
+    $variables['sharepoint_download_url'] = $media->get('field_download_url')->value;
+    $variables['sharepoint_file_size'] = $media->get('field_file_size')->value;
+    $variables['sharepoint_created_by'] = $media->get('field_created_by')->value;
+    
+    // Add formatted file size.
+    $file_size = $media->get('field_file_size')->value;
+    $variables['formatted_file_size'] = $file_size ? format_size($file_size) : '';
+    
+    // Add file type icon class.
+    $mime_type = $media->get('field_mime_type')->value;
+    $variables['file_type_class'] = sharepoint_media_get_file_type_class($mime_type);
+  }
+}
+
+/**
+ * Helper function to get CSS class for file type.
+ */
+function sharepoint_media_get_file_type_class($mime_type) {
+  $type_map = [
+    'image/' => 'file-type-image',
+    'video/' => 'file-type-video',
+    'audio/' => 'file-type-audio',
+    'application/pdf' => 'file-type-pdf',
+    'application/msword' => 'file-type-document',
+    'application/vnd.openxmlformats-officedocument' => 'file-type-office',
+    'text/' => 'file-type-text',
+  ];
+  
+  foreach ($type_map as $prefix => $class) {
+    if (strpos($mime_type, $prefix) === 0) {
+      return $class;
+    }
+  }
+  
+  return 'file-type-generic';
+}
+
+/**
+ * Implements hook_search_api_index_items_alter().
+ */
+function sharepoint_media_search_api_index_items_alter(array &$items, \Drupal\search_api\IndexInterface $index) {
+  if ($index->id() === 'sharepoint_media') {
+    foreach ($items as $item) {
+      $entity = $item->getOriginalObject()->getValue();
+      if ($entity->bundle() === 'sharepoint_file') {
+        // Add additional indexable content.
+        $item->setField('extracted_text', sharepoint_media_extract_searchable_text($entity));
+      }
+    }
+  }
+}
+
+/**
+ * Extract searchable text from SharePoint media entity.
+ */
+function sharepoint_media_extract_searchable_text(MediaInterface $media) {
+  $text_parts = [];
+  
+  // Add filename without extension.
+  $name = $media->getName();
+  $text_parts[] = pathinfo($name, PATHINFO_FILENAME);
+  
+  // Add SharePoint path components.
+  $path = $media->get('field_sharepoint_path')->value;
+  if ($path) {
+    $path_parts = explode('/', trim($path, '/'));
+    $text_parts = array_merge($text_parts, $path_parts);
+  }
+  
+  // Add creator name.
+  $created_by = $media->get('field_created_by')->value;
+  if ($created_by) {
+    $text_parts[] = $created_by;
+  }
+  
+  // Add tags if present.
+  if ($media->hasField('field_tags') && !$media->get('field_tags')->isEmpty()) {
+    foreach ($media->get('field_tags') as $tag) {
+      $text_parts[] = $tag->entity->getName();
+    }
+  }
+  
+  return implode(' ', array_filter($text_parts));
+}

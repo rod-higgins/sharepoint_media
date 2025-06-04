@@ -1,0 +1,655 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the SharePoint Media module.
+ */
+
+use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\media\Entity\MediaType;
+
+/**
+ * Implements hook_install().
+ */
+function sharepoint_media_install() {
+  // Create the SharePoint file media type.
+  $media_type = MediaType::create([
+    'id' => 'sharepoint_file',
+    'label' => 'SharePoint File',
+    'description' => 'Media type for SharePoint drive items.',
+    'source' => 'sharepoint_file',
+    'queue_thumbnail_downloads' => FALSE,
+    'new_revision' => FALSE,
+  ]);
+  
+  $media_type->save();
+
+  // Create required fields.
+  sharepoint_media_create_fields();
+
+  // Set up the media type source field.
+  $source_field = $media_type->getSource()->createSourceField($media_type);
+  $source_field->getFieldStorageDefinition()->save();
+  $source_field->save();
+
+  // Configure the source field.
+  $media_type->set('source_configuration', [
+    'source_field' => $source_field->getName(),
+  ]);
+  $media_type->save();
+
+  // Create directories.
+  $directories = [
+    'public://sharepoint_thumbnails',
+    'private://sharepoint_cache',
+  ];
+
+  foreach ($directories as $directory) {
+    \Drupal::service('file_system')->prepareDirectory($directory, \Drupal\Core\File\FileSystemInterface::CREATE_DIRECTORY | \Drupal\Core\File\FileSystemInterface::MODIFY_PERMISSIONS);
+  }
+
+  // Set default configuration.
+  $config = \Drupal::configFactory()->getEditable('sharepoint_media.settings');
+  $config->setData([
+    'auto_sync_enabled' => FALSE,
+    'auto_sync_interval' => 3600,
+    'auto_refresh_urls' => TRUE,
+    'batch_size' => 50,
+    'allowed_file_types' => [],
+    'max_file_size' => 0,
+    'exclude_paths' => '',
+    'debug_mode' => FALSE,
+    'thumbnail_cache_duration' => 24,
+    'url_cache_duration' => 50,
+    'concurrent_requests' => 5,
+    'enable_search_preprocessing' => TRUE,
+    'cache_metadata' => TRUE,
+    'lazy_load_thumbnails' => TRUE,
+  ]);
+  $config->save();
+
+  // Display installation message.
+  \Drupal::messenger()->addStatus(t('SharePoint Media module installed successfully. Please configure your Microsoft Graph API connection at <a href="@url">SharePoint Media Settings</a>.', [
+    '@url' => \Drupal\Core\Url::fromRoute('sharepoint_media.settings')->toString(),
+  ]));
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function sharepoint_media_uninstall() {
+  // Delete the media type and all associated media entities.
+  $media_storage = \Drupal::entityTypeManager()->getStorage('media');
+  $media_type_storage = \Drupal::entityTypeManager()->getStorage('media_type');
+
+  // Delete all SharePoint media entities.
+  $query = $media_storage->getQuery()
+    ->condition('bundle', 'sharepoint_file')
+    ->accessCheck(FALSE);
+  $entity_ids = $query->execute();
+
+  if (!empty($entity_ids)) {
+    $media_entities = $media_storage->loadMultiple($entity_ids);
+    $media_storage->delete($media_entities);
+  }
+
+  // Delete the media type.
+  $media_type = $media_type_storage->load('sharepoint_file');
+  if ($media_type) {
+    $media_type->delete();
+  }
+
+  // Clean up directories.
+  $file_system = \Drupal::service('file_system');
+  $directories = [
+    'public://sharepoint_thumbnails',
+    'private://sharepoint_cache',
+  ];
+
+  foreach ($directories as $directory) {
+    if (is_dir($directory)) {
+      $file_system->deleteRecursive($directory);
+    }
+  }
+
+  // Clear caches.
+  \Drupal::cache()->deleteAll();
+  \Drupal::cache('data')->deleteAll();
+
+  // Delete state variables.
+  \Drupal::state()->deleteMultiple([
+    'sharepoint_media.last_auto_sync',
+    'sharepoint_media.sync_status',
+  ]);
+}
+
+/**
+ * Create required fields for SharePoint media type.
+ */
+function sharepoint_media_create_fields() {
+  $fields = [
+    // Basic SharePoint fields.
+    'field_sharepoint_drive_item_id' => [
+      'type' => 'string',
+      'label' => 'SharePoint Drive Item ID',
+      'required' => TRUE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 255,
+      ],
+    ],
+    'field_download_url' => [
+      'type' => 'uri',
+      'label' => 'Download URL',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 2048,
+      ],
+    ],
+    'field_web_url' => [
+      'type' => 'uri',
+      'label' => 'SharePoint Web URL',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 2048,
+      ],
+    ],
+    'field_mime_type' => [
+      'type' => 'string',
+      'label' => 'MIME Type',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 127,
+      ],
+    ],
+    'field_file_size' => [
+      'type' => 'integer',
+      'label' => 'File Size',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_sharepoint_path' => [
+      'type' => 'string',
+      'label' => 'SharePoint Path',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 1024,
+      ],
+    ],
+
+    // User information.
+    'field_created_by' => [
+      'type' => 'string',
+      'label' => 'Created By',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 255,
+      ],
+    ],
+    'field_modified_by' => [
+      'type' => 'string',
+      'label' => 'Modified By',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 255,
+      ],
+    ],
+
+    // Dates.
+    'field_created_date' => [
+      'type' => 'datetime',
+      'label' => 'Created Date',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'datetime_type' => 'datetime',
+      ],
+    ],
+    'field_modified_date' => [
+      'type' => 'datetime',
+      'label' => 'Modified Date',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'datetime_type' => 'datetime',
+      ],
+    ],
+
+    // Thumbnail.
+    'field_thumbnail_url' => [
+      'type' => 'uri',
+      'label' => 'Thumbnail URL',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 2048,
+      ],
+    ],
+    'field_thumbnail_file' => [
+      'type' => 'image',
+      'label' => 'Thumbnail File',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'file_directory' => 'sharepoint_thumbnails',
+        'file_extensions' => 'png jpg jpeg gif',
+        'max_filesize' => '1 MB',
+        'max_resolution' => '600x600',
+        'min_resolution' => '50x50',
+      ],
+    ],
+
+    // Image metadata.
+    'field_image_width' => [
+      'type' => 'integer',
+      'label' => 'Image Width',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_image_height' => [
+      'type' => 'integer',
+      'label' => 'Image Height',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+
+    // Video metadata.
+    'field_video_width' => [
+      'type' => 'integer',
+      'label' => 'Video Width',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_video_height' => [
+      'type' => 'integer',
+      'label' => 'Video Height',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_duration' => [
+      'type' => 'integer',
+      'label' => 'Duration (seconds)',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_frame_rate' => [
+      'type' => 'decimal',
+      'label' => 'Frame Rate',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'precision' => 8,
+        'scale' => 2,
+      ],
+    ],
+    'field_bitrate' => [
+      'type' => 'integer',
+      'label' => 'Bitrate',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+
+    // Audio metadata.
+    'field_audio_channels' => [
+      'type' => 'integer',
+      'label' => 'Audio Channels',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_audio_sample_rate' => [
+      'type' => 'integer',
+      'label' => 'Audio Sample Rate',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_audio_bits_per_sample' => [
+      'type' => 'integer',
+      'label' => 'Audio Bits Per Sample',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+
+    // Music metadata.
+    'field_artist' => [
+      'type' => 'string',
+      'label' => 'Artist',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 255,
+      ],
+    ],
+    'field_album' => [
+      'type' => 'string',
+      'label' => 'Album',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 255,
+      ],
+    ],
+    'field_album_artist' => [
+      'type' => 'string',
+      'label' => 'Album Artist',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 255,
+      ],
+    ],
+    'field_genre' => [
+      'type' => 'string',
+      'label' => 'Genre',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 100,
+      ],
+    ],
+    'field_year' => [
+      'type' => 'integer',
+      'label' => 'Year',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_track_number' => [
+      'type' => 'integer',
+      'label' => 'Track Number',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+
+    // Photo metadata.
+    'field_camera_make' => [
+      'type' => 'string',
+      'label' => 'Camera Make',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 100,
+      ],
+    ],
+    'field_camera_model' => [
+      'type' => 'string',
+      'label' => 'Camera Model',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 100,
+      ],
+    ],
+    'field_date_taken' => [
+      'type' => 'datetime',
+      'label' => 'Date Taken',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'datetime_type' => 'datetime',
+      ],
+    ],
+    'field_f_number' => [
+      'type' => 'decimal',
+      'label' => 'F-Number',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'precision' => 4,
+        'scale' => 1,
+      ],
+    ],
+    'field_exposure_time' => [
+      'type' => 'string',
+      'label' => 'Exposure Time',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 50,
+      ],
+    ],
+    'field_iso' => [
+      'type' => 'integer',
+      'label' => 'ISO',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'unsigned' => TRUE,
+      ],
+    ],
+    'field_focal_length' => [
+      'type' => 'decimal',
+      'label' => 'Focal Length',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'precision' => 8,
+        'scale' => 2,
+      ],
+    ],
+
+    // Additional metadata.
+    'field_file_extension' => [
+      'type' => 'string',
+      'label' => 'File Extension',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 10,
+      ],
+    ],
+    'field_file_type_category' => [
+      'type' => 'string',
+      'label' => 'File Type Category',
+      'required' => FALSE,
+      'cardinality' => 1,
+      'settings' => [
+        'max_length' => 50,
+      ],
+    ],
+    'field_auto_tags' => [
+      'type' => 'string_long',
+      'label' => 'Auto-generated Tags',
+      'required' => FALSE,
+      'cardinality' => 1,
+    ],
+
+    // Tags field for manual tagging.
+    'field_tags' => [
+      'type' => 'entity_reference',
+      'label' => 'Tags',
+      'required' => FALSE,
+      'cardinality' => -1,
+      'settings' => [
+        'target_type' => 'taxonomy_term',
+      ],
+      'handler_settings' => [
+        'target_bundles' => [
+          'tags' => 'tags',
+        ],
+        'auto_create' => TRUE,
+      ],
+    ],
+  ];
+
+  foreach ($fields as $field_name => $field_config) {
+    // Create field storage.
+    $field_storage = FieldStorageConfig::create([
+      'field_name' => $field_name,
+      'entity_type' => 'media',
+      'type' => $field_config['type'],
+      'cardinality' => $field_config['cardinality'],
+      'settings' => $field_config['settings'] ?? [],
+    ]);
+    $field_storage->save();
+
+    // Create field instance.
+    $field = FieldConfig::create([
+      'field_storage' => $field_storage,
+      'bundle' => 'sharepoint_file',
+      'label' => $field_config['label'],
+      'required' => $field_config['required'],
+      'settings' => $field_config['handler_settings'] ?? [],
+    ]);
+    $field->save();
+  }
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function sharepoint_media_requirements($phase) {
+  $requirements = [];
+
+  if ($phase === 'runtime') {
+    $config = \Drupal::config('sharepoint_media.settings');
+    
+    // Check if connection is configured.
+    $is_configured = $config->get('tenant_id') && $config->get('client_id') && $config->get('client_secret');
+    
+    $requirements['sharepoint_media_connection'] = [
+      'title' => t('SharePoint Media Connection'),
+      'value' => $is_configured ? t('Configured') : t('Not configured'),
+      'severity' => $is_configured ? REQUIREMENT_OK : REQUIREMENT_WARNING,
+      'description' => $is_configured ? 
+        t('SharePoint connection is configured.') : 
+        t('SharePoint connection is not configured. Please visit the <a href="@url">settings page</a>.', [
+          '@url' => \Drupal\Core\Url::fromRoute('sharepoint_media.settings')->toString(),
+        ]),
+    ];
+
+    // Check Search API configuration.
+    $index = \Drupal\search_api\Entity\Index::load('sharepoint_media');
+    $search_configured = $index && $index->status();
+    
+    $requirements['sharepoint_media_search'] = [
+      'title' => t('SharePoint Media Search'),
+      'value' => $search_configured ? t('Configured') : t('Not configured'),
+      'severity' => $search_configured ? REQUIREMENT_OK : REQUIREMENT_INFO,
+      'description' => $search_configured ? 
+        t('Search index is configured and enabled.') : 
+        t('Search index is not configured. Media search functionality will be limited.'),
+    ];
+
+    // Check directory permissions.
+    $directories = [
+      'public://sharepoint_thumbnails',
+      'private://sharepoint_cache',
+    ];
+    
+    $directory_issues = [];
+    foreach ($directories as $directory) {
+      if (!is_dir($directory) || !is_writable($directory)) {
+        $directory_issues[] = $directory;
+      }
+    }
+    
+    $requirements['sharepoint_media_directories'] = [
+      'title' => t('SharePoint Media Directories'),
+      'value' => empty($directory_issues) ? t('All directories writable') : t('@count directories not writable', ['@count' => count($directory_issues)]),
+      'severity' => empty($directory_issues) ? REQUIREMENT_OK : REQUIREMENT_ERROR,
+      'description' => empty($directory_issues) ? 
+        t('All required directories are writable.') : 
+        t('The following directories are not writable: @directories', ['@directories' => implode(', ', $directory_issues)]),
+    ];
+
+    // Check sync status.
+    if ($is_configured) {
+      $stats = \Drupal::service('sharepoint_media.sync_service')->getSyncStatistics();
+      
+      $requirements['sharepoint_media_sync'] = [
+        'title' => t('SharePoint Media Sync'),
+        'value' => t('@count media items', ['@count' => $stats['total_media']]),
+        'severity' => REQUIREMENT_INFO,
+        'description' => t('Total synchronized media items: @total. Last sync: @last', [
+          '@total' => $stats['total_media'],
+          '@last' => $stats['last_sync'] ? \Drupal::service('date.formatter')->format($stats['last_sync'], 'medium') : t('Never'),
+        ]),
+      ];
+    }
+  }
+
+  return $requirements;
+}
+
+/**
+ * Update 8001: Add new metadata fields.
+ */
+function sharepoint_media_update_8001() {
+  // Add any new fields that were added after initial release.
+  $new_fields = [
+    'field_auto_tags' => [
+      'type' => 'string_long',
+      'label' => 'Auto-generated Tags',
+      'required' => FALSE,
+      'cardinality' => 1,
+    ],
+  ];
+
+  foreach ($new_fields as $field_name => $field_config) {
+    // Check if field already exists.
+    $field_storage = FieldStorageConfig::loadByName('media', $field_name);
+    if (!$field_storage) {
+      // Create field storage.
+      $field_storage = FieldStorageConfig::create([
+        'field_name' => $field_name,
+        'entity_type' => 'media',
+        'type' => $field_config['type'],
+        'cardinality' => $field_config['cardinality'],
+        'settings' => $field_config['settings'] ?? [],
+      ]);
+      $field_storage->save();
+
+      // Create field instance.
+      $field = FieldConfig::create([
+        'field_storage' => $field_storage,
+        'bundle' => 'sharepoint_file',
+        'label' => $field_config['label'],
+        'required' => $field_config['required'],
+      ]);
+      $field->save();
+    }
+  }
+}

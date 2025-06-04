@@ -1,0 +1,31 @@
+services:
+  sharepoint_media.sync_service:
+    class: Drupal\sharepoint_media\Service\SharePointSyncService
+    arguments: 
+      - '@entity_type.manager'
+      - '@config.factory'
+      - '@logger.factory'
+      - '@http_client'
+      - '@cache.default'
+
+  sharepoint_media.metadata_extractor:
+    class: Drupal\sharepoint_media\Service\MetadataExtractor
+    arguments: 
+      - '@file_system'
+      - '@http_client'
+      - '@logger.factory'
+
+  sharepoint_media.graph_client:
+    class: Drupal\sharepoint_media\Service\GraphApiClient
+    arguments:
+      - '@config.factory'
+      - '@http_client'
+      - '@cache.default'
+      - '@logger.factory'
+
+  sharepoint_media.url_manager:
+    class: Drupal\sharepoint_media\Service\DownloadUrlManager
+    arguments:
+      - '@sharepoint_media.graph_client'
+      - '@cache.default'
+      - '@logger.factory'
