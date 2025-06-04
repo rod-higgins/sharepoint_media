@@ -1,0 +1,7 @@
+langcode: en
+status: true
+dependencies: {}
+name: 'SharePoint Media Tags'
+vid: sharepoint_media_tags
+description: 'Tags for SharePoint media files'
+weight: 0

@@ -1,30 +1,51 @@
 # SharePoint Media Integration for Drupal
 
+[![Drupal](https://img.shields.io/badge/Drupal-10.3%2B%20%7C%2011.x-blue.svg)](https://www.drupal.org)
+[![PHP](https://img.shields.io/badge/PHP-8.1%2B-blue.svg)](https://php.net)
+[![License](https://img.shields.io/badge/License-GPL--2.0-green.svg)](LICENSE)
+
 A comprehensive Drupal module that integrates SharePoint drives as media sources, providing powerful search capabilities and metadata extraction without storing files locally.
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Security](#security)
+- [Performance](#performance)
+- [Development](#development)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Support](#support)
+- [License](#license)
 
 ## Features
 
-### 🚀 **Core Functionality**
+### 🚀 Core Functionality
 - **SharePoint Integration**: Direct integration with Microsoft SharePoint via Graph API
 - **Virtual Media Storage**: Reference SharePoint files without local storage
 - **Rich Metadata Extraction**: Automatic extraction of EXIF, video, audio, and document metadata
 - **Powerful Search**: Full-text search with faceted filtering using Search API PostgreSQL
 - **Streaming Support**: Direct streaming of videos and audio files from SharePoint
 - **Thumbnail Generation**: Automatic thumbnail caching and generation
+- **Secure Credentials**: Integration with Drupal Key module for secure credential storage
 
-### 📊 **Advanced Search Features**
+### 📊 Advanced Search Features
 - **Faceted Search**: Filter by file type, size, resolution, creation date, and more
 - **Full-text Search**: Search file names, paths, metadata, and auto-generated tags
 - **Smart Categorization**: Automatic file type and quality scoring
 - **Search Preprocessing**: Enhanced keyword extraction and technical specifications indexing
 
-### 🔄 **Synchronization**
+### 🔄 Synchronization
 - **Automatic Sync**: Scheduled synchronization via Drupal cron
 - **Manual Sync**: On-demand synchronization with progress tracking
 - **Selective Sync**: Configure specific drives and folders to sync
 - **Incremental Updates**: Only sync changed or new files
 
-### 🎯 **Media Management**
+### 🎯 Media Management
 - **Multiple View Modes**: Grid and list views for search results
 - **Bulk Operations**: Mass download, tagging, and management
 - **Download Proxy**: Secure file downloads through Drupal
@@ -34,34 +55,53 @@ A comprehensive Drupal module that integrates SharePoint drives as media sources
 
 ### System Requirements
 - **Drupal**: 10.3+ or 11.x
-- **PHP**: 8.1+
-- **Database**: PostgreSQL (recommended for Search API)
+- **PHP**: 8.1+ with extensions:
+  - `curl`
+  - `json`
+  - `openssl`
+  - `gd` or `imagick` (for thumbnail processing)
+- **Database**: PostgreSQL 12+ (recommended for Search API)
 - **Memory**: 256MB+ (512MB recommended for sync operations)
+- **Disk Space**: Minimal (only thumbnails are cached locally)
 
 ### Required Drupal Modules
-- Media
-- Field
-- Search API
-- Search API PostgreSQL
-- HTTP Client Manager (or similar for Graph API calls)
+- **Core modules**: Media, Field, Image, File, DateTime
+- **Contributed modules**:
+  - [Search API](https://www.drupal.org/project/search_api)
+  - [Search API PostgreSQL](https://www.drupal.org/project/search_api_postgresql)
+  - [Key](https://www.drupal.org/project/key) (recommended for secure credential storage)
 
 ### Microsoft 365 Requirements
 - Microsoft 365 subscription with SharePoint
 - Azure AD app registration with appropriate permissions
-- SharePoint drive access
+- SharePoint drive access with read permissions
 
 ## Installation
 
-### 1. Install the Module
+### 1. Install Dependencies
+
+```bash
+# Install required modules
+composer require drupal/search_api drupal/search_api_postgresql drupal/key
+
+# Enable modules
+drush en search_api search_api_postgresql key
+```
+
+### 2. Install SharePoint Media Module
 
 ```bash
 # Using Composer (recommended)
 composer require drupal/sharepoint_media
 
-# Or download and extract to modules/custom/sharepoint_media
+# Or download and extract manually
+cd modules/custom/
+wget https://github.com/your-repo/sharepoint_media/archive/main.zip
+unzip main.zip
+mv sharepoint_media-main sharepoint_media
 ```
 
-### 2. Enable the Module
+### 3. Enable the Module
 
 ```bash
 drush en sharepoint_media
@@ -69,16 +109,27 @@ drush en sharepoint_media
 
 Or enable via the Drupal admin interface at `/admin/modules`.
 
-### 3. Configure Search API
+### 4. Configure Database (PostgreSQL recommended)
 
-1. Install and configure Search API PostgreSQL
-2. Create a PostgreSQL server at `/admin/config/search/search-api/add-server`
+```sql
+-- Optimize PostgreSQL for search performance
+CREATE INDEX idx_sharepoint_media_type ON media__field_mime_type (field_mime_type_value);
+CREATE INDEX idx_sharepoint_media_size ON media__field_file_size (field_file_size_value);
+CREATE INDEX idx_sharepoint_media_date ON media__field_created_date (field_created_date_value);
+```
+
+### 5. Configure Search API
+
+1. Navigate to `/admin/config/search/search-api`
+2. Create a PostgreSQL server configuration
 3. The module will automatically create the "SharePoint Media Index"
+4. Enable and configure the index
 
 ## Configuration
 
 ### 1. Azure AD App Registration
 
+#### Create Application
 1. Go to [Azure Portal](https://portal.azure.com)
 2. Navigate to **Azure Active Directory** > **App registrations**
 3. Click **New registration**
@@ -87,22 +138,45 @@ Or enable via the Drupal admin interface at `/admin/modules`.
    - **Supported account types**: Accounts in this organizational directory only
    - **Redirect URI**: Not required for this integration
 
-5. After creation, note down:
-   - **Application (client) ID**
-   - **Directory (tenant) ID**
+#### Get Credentials
+After creation, note down:
+- **Application (client) ID**
+- **Directory (tenant) ID**
 
-6. Go to **Certificates & secrets**
-7. Create a new client secret and note it down
+#### Create Client Secret
+1. Go to **Certificates & secrets**
+2. Create a new client secret
+3. **Important**: Copy the secret value immediately (it won't be shown again)
 
-8. Go to **API permissions**
-9. Add the following Microsoft Graph permissions:
-   - `Files.Read.All` (Application)
-   - `Sites.Read.All` (Application)
-   - `Directory.Read.All` (Application)
+#### Set API Permissions
+1. Go to **API permissions**
+2. Add the following Microsoft Graph permissions:
+   ```
+   Files.Read.All (Application)
+   Sites.Read.All (Application)
+   Directory.Read.All (Application)
+   ```
+3. **Grant admin consent** for your organization
 
-10. Grant admin consent for your organization
+### 2. Secure Credential Storage (Recommended)
 
-### 2. Module Configuration
+For enhanced security, use the Key module to store Azure credentials:
+
+#### Create Keys
+1. Navigate to `/admin/config/system/keys`
+2. Create three keys:
+   - **Azure Tenant ID**: Store your tenant ID
+   - **Azure Client ID**: Store your client ID  
+   - **Azure Client Secret**: Store your client secret (use "Config" key provider for encrypted storage)
+
+#### Configure Module to Use Keys
+1. Navigate to `/admin/config/media/sharepoint-media`
+2. In the connection section, select your created keys instead of entering values directly
+3. Test the connection to verify setup
+
+### 3. Alternative: Direct Configuration
+
+If not using the Key module:
 
 1. Navigate to `/admin/config/media/sharepoint-media`
 2. Enter your Azure AD credentials:
@@ -110,24 +184,22 @@ Or enable via the Drupal admin interface at `/admin/modules`.
    - **Client ID**: Application ID from app registration
    - **Client Secret**: Client secret created above
 
-3. Click **Test Connection** to verify setup
+### 4. Sync Configuration
 
-4. Configure sync settings:
-   - Enable automatic sync if desired
-   - Set sync interval
-   - Configure file type filters
-   - Set maximum file size limits
+Configure synchronization settings:
 
-5. Select SharePoint drives to sync
+1. **Automatic Sync**: Enable/disable scheduled sync
+2. **Sync Interval**: How often to run automatic sync
+3. **Batch Size**: Number of items to process per batch
+4. **File Filters**: Restrict sync to specific file types
+5. **Size Limits**: Set maximum file size for sync
 
-### 3. Search Configuration
+### 5. Select SharePoint Drives
 
-The module automatically configures the search index, but you can customize:
-
-1. Go to `/admin/config/search/search-api/index/sharepoint_media`
-2. Adjust field weights and settings
-3. Configure additional processors if needed
-4. Index existing content
+1. Click **Test Connection** to verify setup
+2. The interface will load available drives
+3. Select drives and folders to sync
+4. Configure per-drive options
 
 ## Usage
 
@@ -162,23 +234,110 @@ The module automatically configures the search index, but you can customize:
 - **Tagging**: Add tags to media items for better organization
 - **Metadata**: View detailed metadata in the info modal
 
-## API Reference
+## Security
 
-### Services
+### Access Control
 
-#### SharePointSyncService
-```php
-// Get the sync service
-$sync_service = \Drupal::service('sharepoint_media.sync_service');
+The module implements several permission levels:
 
-// Sync a specific drive
-$results = $sync_service->syncDriveItems($drive_id, $folder_path, $options);
-
-// Get sync statistics
-$stats = $sync_service->getSyncStatistics();
+```yaml
+# User permissions
+administer sharepoint media: Full administrative access
+access sharepoint media: View and download files
+search sharepoint media: Use search functionality
+sync sharepoint media: Trigger manual sync operations
+manage sharepoint media urls: Refresh and manage URLs
+view sharepoint media metadata: View detailed metadata
+stream sharepoint media: Stream audio/video files
+download sharepoint media: Download files via proxy
 ```
 
-#### GraphApiClient
+### Data Privacy
+
+- **No Local Storage**: File content is never stored locally
+- **Metadata Caching**: Only metadata is cached with configurable expiration
+- **Proxied Downloads**: Download URLs are proxied through Drupal for access control
+- **HTTPS Only**: All API communications use encrypted connections
+- **Secure Credentials**: Use Key module for encrypted credential storage
+
+### Best Practices
+
+1. **Principle of Least Privilege**: Use minimal required Graph API permissions
+2. **Regular Rotation**: Rotate client secrets every 6-12 months
+3. **Access Monitoring**: Monitor file access patterns in logs
+4. **Cache Management**: Regularly clear sensitive caches
+5. **Network Security**: Ensure server-to-server communications are secure
+
+## Performance
+
+### Optimization Strategies
+
+#### For Large Libraries (10,000+ files)
+- Use selective sync with folder filtering
+- Increase batch size for initial sync (100-200 items)
+- Enable automatic URL refresh
+- Use Drupal Queue for large operations
+- Consider staggered sync schedules
+
+#### Caching Configuration
+```yaml
+# Recommended cache settings
+thumbnail_cache_duration: 24    # Hours
+url_cache_duration: 50         # Minutes (URLs expire after ~1 hour)
+metadata_cache_duration: 3600  # Seconds
+```
+
+#### Database Optimization
+```sql
+-- Additional PostgreSQL indexes for better performance
+CREATE INDEX idx_sharepoint_drive_item ON media__field_sharepoint_drive_item_id (field_sharepoint_drive_item_id_value);
+CREATE INDEX idx_sharepoint_path ON media__field_sharepoint_path (field_sharepoint_path_value);
+CREATE INDEX CONCURRENTLY idx_sharepoint_search ON media__field_auto_tags USING gin(to_tsvector('english', field_auto_tags_value));
+```
+
+### Monitoring
+
+Track performance metrics:
+
+- Sync operation duration
+- API response times
+- Cache hit rates
+- Memory usage during sync
+- Database query performance
+
+## Development
+
+### Module Architecture
+
+```
+sharepoint_media/
+├── config/
+│   ├── install/           # Default configuration
+│   └── schema/           # Configuration schema
+├── css/                  # Stylesheets
+├── js/                   # JavaScript files
+├── src/
+│   ├── Controller/       # Route controllers
+│   ├── Form/            # Form classes
+│   ├── Plugin/          # Plugin implementations
+│   │   ├── media/Source/ # Media source plugin
+│   │   └── search_api/   # Search API processors
+│   └── Service/         # Service classes
+│       ├── GraphApiClient.php
+│       ├── SharePointSyncService.php
+│       ├── DownloadUrlManager.php
+│       └── MetadataExtractor.php
+├── templates/           # Twig templates
+├── tests/              # PHPUnit tests
+│   ├── src/Unit/       # Unit tests
+│   ├── src/Kernel/     # Kernel tests
+│   └── src/Functional/ # Functional tests
+└── README.md
+```
+
+### API Usage
+
+#### GraphApiClient Service
 ```php
 // Get the Graph API client
 $graph_client = \Drupal::service('sharepoint_media.graph_client');
@@ -188,9 +347,27 @@ $drive_item = $graph_client->getDriveItem($drive_item_id);
 
 // Search drive items
 $results = $graph_client->searchDriveItems($query, $options);
+
+// Test connection
+$is_connected = $graph_client->testConnection();
 ```
 
-#### DownloadUrlManager
+#### Sync Service
+```php
+// Get the sync service
+$sync_service = \Drupal::service('sharepoint_media.sync_service');
+
+// Sync a specific drive
+$results = $sync_service->syncDriveItems($drive_id, $folder_path, $options);
+
+// Get sync statistics
+$stats = $sync_service->getSyncStatistics();
+
+// Refresh expired URLs
+$sync_service->refreshExpiredUrls();
+```
+
+#### Download URL Manager
 ```php
 // Get the URL manager
 $url_manager = \Drupal::service('sharepoint_media.url_manager');
@@ -200,6 +377,9 @@ $download_url = $url_manager->getFreshDownloadUrl($drive_item_id);
 
 // Get multiple URLs efficiently
 $urls = $url_manager->getMultipleDownloadUrls($drive_item_ids);
+
+// Check if URL is expired
+$is_expired = $url_manager->isUrlExpired($download_url);
 ```
 
 ### Hooks
@@ -227,68 +407,55 @@ function mymodule_sharepoint_media_metadata_alter(array &$metadata, array $drive
 }
 ```
 
-## Theming
+## Testing
 
-### Templates
+### Running Tests
 
-The module provides Twig templates that can be overridden:
+```bash
+# Run all tests
+./vendor/bin/phpunit modules/custom/sharepoint_media/tests/
 
-- `sharepoint-media-search-results.html.twig`: Search results page
-- `sharepoint-media-item.html.twig`: Individual media item display
-- `sharepoint-media-thumbnail.html.twig`: Thumbnail display
+# Run specific test types
+./vendor/bin/phpunit modules/custom/sharepoint_media/tests/src/Unit/
+./vendor/bin/phpunit modules/custom/sharepoint_media/tests/src/Kernel/
+./vendor/bin/phpunit modules/custom/sharepoint_media/tests/src/Functional/
 
-### CSS Classes
-
-Key CSS classes for styling:
-
-- `.sharepoint-media-search-results`: Main search results container
-- `.media-grid`: Media items grid
-- `.media-item`: Individual media item
-- `.media-thumbnail`: Thumbnail container
-- `.media-details`: Media metadata and actions
-- `.search-facets`: Faceted search sidebar
-
-### JavaScript Events
-
-The module triggers custom JavaScript events:
-
-```javascript
-// Listen for media item interactions
-$(document).on('sharepoint_media:item_viewed', function(event, mediaId) {
-  // Handle media view
-});
-
-// Listen for search updates
-$(document).on('sharepoint_media:search_updated', function(event, results) {
-  // Handle search results update
-});
+# Run with coverage
+./vendor/bin/phpunit --coverage-html coverage modules/custom/sharepoint_media/tests/
 ```
 
-## Performance Optimization
+### Test Categories
 
-### Caching Strategy
+- **Unit Tests**: Test individual service classes and methods
+- **Kernel Tests**: Test module configuration and entity operations
+- **Functional Tests**: Test complete user workflows and forms
 
-1. **Download URLs**: Cached for 50 minutes (URLs expire after 1 hour)
-2. **Metadata**: Cached for 1 hour with invalidation on changes
-3. **Thumbnails**: Cached locally for 24 hours
-4. **Search Results**: Cached based on Search API configuration
+### Continuous Integration
 
-### Large Libraries
+Example GitHub Actions workflow:
 
-For SharePoint libraries with 10,000+ files:
-
-1. Use selective sync with folder filtering
-2. Increase batch size for initial sync
-3. Enable automatic URL refresh
-4. Consider using Drupal Queue for large operations
-
-### Database Optimization
-
-```sql
--- Index for better search performance
-CREATE INDEX idx_sharepoint_media_type ON media__field_mime_type (field_mime_type_value);
-CREATE INDEX idx_sharepoint_media_size ON media__field_file_size (field_file_size_value);
-CREATE INDEX idx_sharepoint_media_date ON media__field_created_date (field_created_date_value);
+```yaml
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_PASSWORD: drupal
+          POSTGRES_DB: drupal
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.1
+      - name: Install dependencies
+        run: composer install
+      - name: Run tests
+        run: ./vendor/bin/phpunit modules/custom/sharepoint_media/tests/
 ```
 
 ## Troubleshooting
@@ -296,28 +463,40 @@ CREATE INDEX idx_sharepoint_media_date ON media__field_created_date (field_creat
 ### Common Issues
 
 #### Authentication Errors
-- **Issue**: "Failed to get access token"
-- **Solution**: Verify Azure AD app registration and permissions
-- **Check**: Tenant ID, Client ID, and Client Secret are correct
+**Issue**: "Failed to get access token"  
+**Solutions**:
+- Verify Azure AD app registration is correct
+- Check that tenant ID, client ID, and client secret are valid
+- Ensure API permissions are granted and admin consent is provided
+- Check that the Azure AD app is not expired
 
 #### Sync Failures
-- **Issue**: "Sync operation failed"
-- **Solution**: Check SharePoint permissions and drive accessibility
-- **Debug**: Enable debug mode in module settings
+**Issue**: "Sync operation failed"  
+**Solutions**:
+- Verify SharePoint permissions (Files.Read.All required)
+- Check network connectivity to graph.microsoft.com
+- Increase memory limit for PHP if processing large files
+- Check SharePoint drive accessibility
 
-#### Search Not Working
-- **Issue**: No search results
-- **Solution**: Verify Search API configuration and index status
-- **Check**: PostgreSQL server configuration and field mapping
+#### Search Issues
+**Issue**: "No search results" or "Search index not working"  
+**Solutions**:
+- Verify Search API PostgreSQL configuration
+- Check that the search index is enabled and configured
+- Run index rebuild: `drush search-api:rebuild-tracker`
+- Verify field mappings in search index
 
 #### Performance Issues
-- **Issue**: Slow sync or search
-- **Solution**: Optimize batch sizes and enable caching
-- **Monitor**: PHP memory usage and database performance
+**Issue**: "Slow sync or search operations"  
+**Solutions**:
+- Optimize batch sizes (50-100 for sync, 20-50 for search)
+- Enable caching for metadata and URLs
+- Add database indexes for frequently queried fields
+- Monitor PHP memory usage and increase if needed
 
 ### Debug Mode
 
-Enable debug mode for detailed logging:
+Enable detailed logging:
 
 1. Go to module settings
 2. Enable "Debug mode"
@@ -327,83 +506,63 @@ Enable debug mode for detailed logging:
 ### Log Analysis
 
 ```bash
-# Watch Drupal logs for SharePoint Media messages
+# Watch real-time logs
 tail -f /var/log/drupal/drupal.log | grep sharepoint_media
 
 # Check sync operation logs
 drush watchdog:show --type=sharepoint_media --severity=error
+
+# View recent search operations
+drush watchdog:show --type=search_api --count=50
 ```
 
-## Security Considerations
-
-### Access Control
-
-The module implements several permission levels:
-
-- `administer sharepoint media`: Full administrative access
-- `access sharepoint media`: View and download files
-- `search sharepoint media`: Use search functionality
-- `sync sharepoint media`: Trigger manual sync operations
-
-### Data Privacy
-
-- No file content is stored locally
-- Metadata is cached with configurable expiration
-- Download URLs are proxied through Drupal for access control
-- All API communications use HTTPS
-
-### Best Practices
-
-1. **Limit Permissions**: Use minimal required Graph API permissions
-2. **Regular Rotation**: Rotate client secrets regularly
-3. **Access Logging**: Monitor file access patterns
-4. **Cache Management**: Clear sensitive caches when needed
-
-## Development
-
-### Module Structure
-
-```
-sharepoint_media/
-├── config/
-│   ├── install/           # Default configuration
-│   └── schema/           # Configuration schema
-├── css/                  # Stylesheets
-├── js/                   # JavaScript files
-├── src/
-│   ├── Controller/       # Route controllers
-│   ├── Form/            # Form classes
-│   ├── Plugin/          # Plugin implementations
-│   └── Service/         # Service classes
-├── templates/           # Twig templates
-├── sharepoint_media.info.yml
-├── sharepoint_media.module
-├── sharepoint_media.routing.yml
-├── sharepoint_media.services.yml
-├── sharepoint_media.permissions.yml
-└── sharepoint_media.libraries.yml
-```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Follow Drupal coding standards
-4. Add tests for new functionality
-5. Submit a pull request
-
-### Testing
+### Performance Monitoring
 
 ```bash
-# Run PHPUnit tests
-./vendor/bin/phpunit modules/custom/sharepoint_media/tests/
+# Check cache performance
+drush cache:get sharepoint_media
 
-# Run coding standards check
+# Monitor sync statistics
+drush eval "print_r(\Drupal::service('sharepoint_media.sync_service')->getSyncStatistics());"
+
+# Check URL cache status
+drush eval "print_r(\Drupal::service('sharepoint_media.url_manager')->getCacheStats());"
+```
+
+## Contributing
+
+### Getting Started
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Follow Drupal coding standards
+4. Add tests for new functionality
+5. Update documentation as needed
+6. Submit a pull request
+
+### Coding Standards
+
+```bash
+# Check coding standards
 ./vendor/bin/phpcs --standard=Drupal modules/custom/sharepoint_media/
+
+# Fix coding standards automatically
+./vendor/bin/phpcbf --standard=Drupal modules/custom/sharepoint_media/
 
 # Run static analysis
 ./vendor/bin/phpstan analyse modules/custom/sharepoint_media/
 ```
+
+### Submitting Issues
+
+When reporting issues, please include:
+
+- Drupal version
+- PHP version
+- Module version
+- Steps to reproduce
+- Error messages or logs
+- Expected vs actual behavior
 
 ## Support
 
@@ -411,17 +570,20 @@ sharepoint_media/
 - [Microsoft Graph API Documentation](https://docs.microsoft.com/en-us/graph/)
 - [Drupal Media API](https://www.drupal.org/docs/core-modules-and-themes/core-modules/media-module)
 - [Search API Documentation](https://www.drupal.org/docs/contributed-modules/search-api)
+- [Key Module Documentation](https://www.drupal.org/docs/contributed-modules/key)
 
 ### Community
 - [Issue Queue](https://drupal.org/project/issues/sharepoint_media)
 - [Drupal Slack #media channel](https://drupal.slack.com/channels/media)
+- [Stack Overflow](https://stackoverflow.com/questions/tagged/drupal+sharepoint)
 
 ### Commercial Support
-For enterprise support and custom development, contact the module maintainers.
+For enterprise support, custom development, or consulting services, contact the module maintainers.
 
 ## License
 
-This module is licensed under the GNU General Public License v2.0 or later.
+This module is licensed under the GNU General Public License v2.0 or later.  
+See the [LICENSE](LICENSE) file for details.
 
 ## Changelog
 
@@ -432,8 +594,29 @@ This module is licensed under the GNU General Public License v2.0 or later.
 - Automatic metadata extraction
 - Streaming and download capabilities
 - Administrative interface
+- Integration with Drupal Key module for secure credential storage
+- Comprehensive PHPUnit test suite
+- Enhanced error handling and logging
+- Better performance optimization for large libraries
+- Various bug fixes and stability improvements
 
 ---
 
-**Maintainers**: [Rod Higgins]  
-**Last Updated**: June 2025
+**Maintainers**: Rod Higgins 
+**Last Updated**: 4th June 2025  
+**Drupal.org Project**: TBA
+
+## Quick Start Checklist
+
+- [ ] Install required modules (Search API, Key)
+- [ ] Create Azure AD app registration
+- [ ] Configure API permissions and admin consent
+- [ ] Store credentials securely using Key module
+- [ ] Enable SharePoint Media module
+- [ ] Configure sync settings
+- [ ] Test connection and run initial sync
+- [ ] Configure search index
+- [ ] Set up user permissions
+- [ ] Test search and media access
+
+For detailed instructions, see the [Configuration](#configuration) section above.

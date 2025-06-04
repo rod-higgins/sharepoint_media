@@ -2,7 +2,23 @@ sharepoint_media.settings:
   type: config_object
   label: 'SharePoint Media settings'
   mapping:
-    # Connection settings
+    # Credential storage method
+    credential_method:
+      type: string
+      label: 'Credential storage method'
+    
+    # Key-based credential settings
+    tenant_id_key:
+      type: string
+      label: 'Tenant ID Key'
+    client_id_key:
+      type: string
+      label: 'Client ID Key'
+    client_secret_key:
+      type: string
+      label: 'Client Secret Key'
+    
+    # Direct credential settings (fallback)
     tenant_id:
       type: string
       label: 'Microsoft 365 Tenant ID'

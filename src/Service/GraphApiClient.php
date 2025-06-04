@@ -5,12 +5,14 @@ namespace Drupal\sharepoint_media\Service;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
+use Drupal\key\KeyRepositoryInterface;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;
 use Psr\Http\Message\ResponseInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Service for Microsoft Graph API interactions.
+ * Service for Microsoft Graph API interactions with Key module support.
  */
 class GraphApiClient {
 
@@ -53,6 +55,13 @@ class GraphApiClient {
   protected $loggerFactory;
 
   /**
+   * The key repository.
+   *
+   * @var \Drupal\key\KeyRepositoryInterface|null
+   */
+  protected $keyRepository;
+
+  /**
    * The current access token.
    *
    * @var string
@@ -62,11 +71,30 @@ class GraphApiClient {
   /**
    * Constructs a new GraphApiClient.
    */
-  public function __construct(ConfigFactoryInterface $config_factory, ClientInterface $http_client, CacheBackendInterface $cache, LoggerChannelFactoryInterface $logger_factory) {
+  public function __construct(ConfigFactoryInterface $config_factory, ClientInterface $http_client, CacheBackendInterface $cache, LoggerChannelFactoryInterface $logger_factory, KeyRepositoryInterface $key_repository = NULL) {
     $this->configFactory = $config_factory;
     $this->httpClient = $http_client;
     $this->cache = $cache;
     $this->loggerFactory = $logger_factory;
+    $this->keyRepository = $key_repository;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    $key_repository = NULL;
+    if ($container->has('key.repository')) {
+      $key_repository = $container->get('key.repository');
+    }
+
+    return new static(
+      $container->get('config.factory'),
+      $container->get('http_client'),
+      $container->get('cache.default'),
+      $container->get('logger.factory'),
+      $key_repository
+    );
   }
 
   /**
@@ -74,6 +102,82 @@ class GraphApiClient {
    */
   public function getHttpClient() {
     return $this->httpClient;
+  }
+
+  /**
+   * Get Azure AD credentials.
+   *
+   * @return array
+   *   Array containing tenant_id, client_id, and client_secret.
+   *
+   * @throws \Exception
+   *   If credentials are not properly configured.
+   */
+  protected function getCredentials() {
+    $config = $this->configFactory->get('sharepoint_media.settings');
+    $credential_method = $config->get('credential_method') ?: 'config';
+
+    if ($credential_method === 'key' && $this->keyRepository) {
+      return $this->getCredentialsFromKeys($config);
+    }
+    else {
+      return $this->getCredentialsFromConfig($config);
+    }
+  }
+
+  /**
+   * Get credentials from Key module.
+   */
+  protected function getCredentialsFromKeys($config) {
+    $tenant_id_key = $config->get('tenant_id_key');
+    $client_id_key = $config->get('client_id_key');
+    $client_secret_key = $config->get('client_secret_key');
+
+    if (empty($tenant_id_key) || empty($client_id_key) || empty($client_secret_key)) {
+      throw new \Exception('SharePoint Media module credential keys are not properly configured. Please configure the keys in the module settings.');
+    }
+
+    // Retrieve credentials from keys.
+    $tenant_key = $this->keyRepository->getKey($tenant_id_key);
+    $client_key = $this->keyRepository->getKey($client_id_key);
+    $secret_key = $this->keyRepository->getKey($client_secret_key);
+
+    if (!$tenant_key || !$client_key || !$secret_key) {
+      throw new \Exception('One or more SharePoint Media credential keys could not be loaded. Please check your key configuration.');
+    }
+
+    $tenant_id = $tenant_key->getKeyValue();
+    $client_id = $client_key->getKeyValue();
+    $client_secret = $secret_key->getKeyValue();
+
+    if (empty($tenant_id) || empty($client_id) || empty($client_secret)) {
+      throw new \Exception('SharePoint Media credential keys contain empty values. Please check your key values.');
+    }
+
+    return [
+      'tenant_id' => $tenant_id,
+      'client_id' => $client_id,
+      'client_secret' => $client_secret,
+    ];
+  }
+
+  /**
+   * Get credentials from configuration.
+   */
+  protected function getCredentialsFromConfig($config) {
+    $tenant_id = $config->get('tenant_id');
+    $client_id = $config->get('client_id');
+    $client_secret = $config->get('client_secret');
+
+    if (empty($tenant_id) || empty($client_id) || empty($client_secret)) {
+      throw new \Exception('SharePoint Media module is not properly configured. Please configure tenant ID, client ID, and client secret.');
+    }
+
+    return [
+      'tenant_id' => $tenant_id,
+      'client_id' => $client_id,
+      'client_secret' => $client_secret,
+    ];
   }
 
   /**
@@ -93,23 +197,15 @@ class GraphApiClient {
       return $this->accessToken;
     }
 
-    // Get new token.
-    $config = $this->configFactory->get('sharepoint_media.settings');
-    $tenant_id = $config->get('tenant_id');
-    $client_id = $config->get('client_id');
-    $client_secret = $config->get('client_secret');
-
-    if (empty($tenant_id) || empty($client_id) || empty($client_secret)) {
-      throw new \Exception('SharePoint Media module is not properly configured. Please configure tenant ID, client ID, and client secret.');
-    }
-
-    $token_url = sprintf(self::TOKEN_ENDPOINT, $tenant_id);
+    // Get credentials.
+    $credentials = $this->getCredentials();
+    $token_url = sprintf(self::TOKEN_ENDPOINT, $credentials['tenant_id']);
 
     try {
       $response = $this->httpClient->post($token_url, [
         'form_params' => [
-          'client_id' => $client_id,
-          'client_secret' => $client_secret,
+          'client_id' => $credentials['client_id'],
+          'client_secret' => $credentials['client_secret'],
           'scope' => 'https://graph.microsoft.com/.default',
           'grant_type' => 'client_credentials',
         ],
@@ -435,4 +531,5 @@ class GraphApiClient {
       return [];
     }
   }
+
 }

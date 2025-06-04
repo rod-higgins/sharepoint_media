@@ -7,6 +7,9 @@ services:
       - '@logger.factory'
       - '@http_client'
       - '@cache.default'
+    calls:
+      - [setGraphClient, ['@sharepoint_media.graph_client']]
+      - [setMetadataExtractor, ['@sharepoint_media.metadata_extractor']]
 
   sharepoint_media.metadata_extractor:
     class: Drupal\sharepoint_media\Service\MetadataExtractor
@@ -22,6 +25,7 @@ services:
       - '@http_client'
       - '@cache.default'
       - '@logger.factory'
+      - '@?key.repository'
 
   sharepoint_media.url_manager:
     class: Drupal\sharepoint_media\Service\DownloadUrlManager
